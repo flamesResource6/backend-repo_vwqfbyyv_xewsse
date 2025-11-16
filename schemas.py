@@ -1,48 +1,72 @@
 """
-Database Schemas
+Database Schemas for Crop to Nutrition to Patients
 
-Define your MongoDB collection schemas here using Pydantic models.
-These schemas are used for data validation in your application.
-
-Each Pydantic model represents a collection in your database.
-Model name is converted to lowercase for the collection name:
-- User -> "user" collection
-- Product -> "product" collection
-- BlogPost -> "blogs" collection
+Each Pydantic model below maps to a MongoDB collection (lowercased class name).
+We use these for validation and persistence through helper functions in database.py
 """
 
-from pydantic import BaseModel, Field
-from typing import Optional
+from pydantic import BaseModel, Field, EmailStr
+from typing import Optional, List, Literal, Dict, Any
+from datetime import datetime
 
-# Example schemas (replace with your own):
+Role = Literal["farmer", "organization", "mediator", "delivery", "admin"]
+
+class GeoPoint(BaseModel):
+    lat: float = Field(..., ge=-90, le=90)
+    lng: float = Field(..., ge=-180, le=180)
 
 class User(BaseModel):
-    """
-    Users collection schema
-    Collection name: "user" (lowercase of class name)
-    """
-    name: str = Field(..., description="Full name")
-    email: str = Field(..., description="Email address")
-    address: str = Field(..., description="Address")
-    age: Optional[int] = Field(None, ge=0, le=120, description="Age in years")
-    is_active: bool = Field(True, description="Whether user is active")
+    name: str
+    email: EmailStr
+    password_hash: str
+    role: Role
+    phone: Optional[str] = None
+    organization_name: Optional[str] = None
+    location: GeoPoint
+    address: Optional[str] = None
+    is_active: bool = True
 
-class Product(BaseModel):
-    """
-    Products collection schema
-    Collection name: "product" (lowercase of class name)
-    """
-    title: str = Field(..., description="Product title")
-    description: Optional[str] = Field(None, description="Product description")
-    price: float = Field(..., ge=0, description="Price in dollars")
-    category: str = Field(..., description="Product category")
-    in_stock: bool = Field(True, description="Whether product is in stock")
+class Crop(BaseModel):
+    name: str
+    nutrients: Dict[str, float] = Field(default_factory=dict, description="macro/micro per 100g")
 
-# Add your own schemas here:
-# --------------------------------------------------
+class Surplus(BaseModel):
+    farmer_id: str
+    crop_name: str
+    quantity_kg: float = Field(..., gt=0)
+    harvest_date: datetime
+    location: GeoPoint
+    image_url: Optional[str] = None
+    status: Literal["open", "locked", "fulfilled"] = "open"
 
-# Note: The Flames database viewer will automatically:
-# 1. Read these schemas from GET /schema endpoint
-# 2. Use them for document validation when creating/editing
-# 3. Handle all database operations (CRUD) directly
-# 4. You don't need to create any database endpoints!
+class Demand(BaseModel):
+    organization_id: str
+    crop_preferences: List[str] = Field(default_factory=list)
+    nutrition_requirements: Dict[str, float] = Field(default_factory=dict)
+    quantity_kg: float = Field(..., gt=0)
+    required_by: datetime
+    location: GeoPoint
+    status: Literal["open", "locked", "fulfilled"] = "open"
+
+class Match(BaseModel):
+    surplus_id: str
+    demand_id: str
+    mediator_id: str
+    distance_km: float
+    score: float
+    status: Literal["locked", "fulfilled", "cancelled"] = "locked"
+
+class Delivery(BaseModel):
+    match_id: str
+    delivery_agent_id: str
+    pickup_time: Optional[datetime] = None
+    drop_time: Optional[datetime] = None
+    pod_image_url: Optional[str] = None
+    status: Literal["assigned", "picked", "delivered"] = "assigned"
+
+class Notification(BaseModel):
+    user_id: str
+    type: str
+    message: str
+    metadata: Dict[str, Any] = Field(default_factory=dict)
+    read: bool = False
